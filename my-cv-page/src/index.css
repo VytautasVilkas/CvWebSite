@@ -1,0 +1,41 @@
+
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+html {
+  scroll-behavior: smooth;
+}
+
+.underline-hover:hover::after {
+    width: 100%;
+}
+
+.underline-hover:hover {
+    animation: custom-bounce 0.5s ease-out forwards;  /* Trigger bounce once and stay in the final position */
+}
+
+  
+.underline-hover {
+    display: inline-flex; 
+    position: relative;   
+    overflow: hidden;     
+  }
+  
+  .underline-hover::after {
+    content: '';
+    position: absolute;
+    bottom: 0; 
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: currentColor;
+    transition: width 0.3s ease-in-out;
+  }
+  .underline-hover:hover::after {
+    width: 100%;
+  }
