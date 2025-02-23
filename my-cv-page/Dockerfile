@@ -2,9 +2,11 @@
 FROM node:20 AS build
 WORKDIR /app
 
-# Copy package.json and package-lock.json first
-COPY package.json package-lock.json ./
-RUN npm install
+# Copy package.json and package-lock.json first for better caching
+COPY package*.json ./
+
+# Add --legacy-peer-deps to avoid dependency conflicts
+RUN npm install --legacy-peer-deps
 
 # Copy all project files AFTER installing dependencies
 COPY . . 
@@ -20,7 +22,7 @@ RUN rm -rf ./*
 # Copy React build output to Nginx HTML directory
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy custom Nginx config
+# Copy custom Nginx config for this app
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 100
