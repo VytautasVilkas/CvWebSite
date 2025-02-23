@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json first for better caching
 COPY package*.json ./
 
-# Add --legacy-peer-deps to avoid dependency conflicts
-RUN npm install --legacy-peer-deps
+# Install all dependencies including devDependencies
+RUN npm install --legacy-peer-deps --include=dev
 
 # Copy all project files AFTER installing dependencies
 COPY . . 
@@ -28,3 +28,4 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Expose port 100
 EXPOSE 100
 CMD ["nginx", "-g", "daemon off;"]
+
