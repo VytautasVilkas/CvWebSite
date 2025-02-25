@@ -6,7 +6,7 @@ function Contact() {
 
   const contactInfo = {
     email: "Vytautas@Vilkas.lt",
-    phone: "+370 60600845",
+    phone: "+370 60600856",
   };
 
   return (
