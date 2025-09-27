@@ -1,18 +1,65 @@
-name: Docker Image CI
+- name: Deploy over SSH (password)
+  env:
+    SSH_USER: ${{ secrets.SSH_USER }}
+    SSH_HOST: ${{ secrets.SSH_HOST }}
+    WORK_DIR: ${{ secrets.WORK_DIR }}     # e.g. /home/deploy/my-cv-page
+    BRANCH:   ${{ secrets.MAIN_BRANCH || 'main' }}
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
-jobs:
+    CONTAINER_NAME: my-cv-page
+    IMAGE_NAME: my-cv-page
+    PORTS: 80:80            
+  run: |
+    set -euo pipefail
 
-  build:
+    sshpass -p "${{ secrets.SSH_PASSWORD }}" \
+      ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+    set -euo pipefail
 
-    runs-on: ubuntu-latest
+    cd "$WORK_DIR"
 
-    steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+    # 1) Update repo
+    git fetch --all --prune
+    git checkout "$BRANCH" || git checkout -B "$BRANCH"
+    git reset --hard "origin/$BRANCH"
+
+    # 2) If docker-compose/compose file exists, use it (auto-recreates)
+    if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yaml ]; then
+      if command -v docker-compose >/dev/null 2>&1; then
+        DC=docker-compose
+      else
+        DC="docker compose"
+      fi
+      $DC pull || true
+      $DC build --pull
+      $DC up -d --remove-orphans
+    else
+      # 3) Single-container flow: replace running container named $CONTAINER_NAME
+      CONTAINER_NAME="${CONTAINER_NAME:-my-cv-page}"
+      IMAGE_NAME="${IMAGE_NAME:-my-cv-page}"
+      PORTS="${PORTS:-80:80}"   # comma-separated becomes multiple -p flags
+
+      # Stop & remove old container if present
+      CID="$(docker ps -aq -f "name=^${CONTAINER_NAME}$" || true)"
+      if [ -n "$CID" ]; then
+        docker stop "$CONTAINER_NAME" || true
+        docker rm "$CONTAINER_NAME" || true
+      fi
+
+      # Build new image (uses Dockerfile in WORK_DIR)
+      docker build -t "$IMAGE_NAME:latest" .
+
+      # Expand comma-separated ports to multiple -p flags
+      PORT_FLAGS=""
+      IFS=',' read -ra PARR <<< "$PORTS"
+      for p in "${PARR[@]}"; do
+        PORT_FLAGS="$PORT_FLAGS -p ${p//[[:space:]]/}"
+      done
+
+      # Run new container
+      eval docker run -d --name "$CONTAINER_NAME" --restart unless-stopped $PORT_FLAGS "$IMAGE_NAME:latest"
+    fi
+
+    # 4) Cleanup dangling images (optional)
+    docker image prune -f || true
+    EOF
