@@ -82,4 +82,4 @@ jobs:
 
           # 5) Cleanup dangling images (optional)
           docker image prune -f || true
-EOF
+          EOF
