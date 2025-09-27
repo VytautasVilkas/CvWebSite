@@ -1,65 +1,85 @@
-- name: Deploy over SSH (password)
-  env:
-    SSH_USER: ${{ secrets.SSH_USER }}
-    SSH_HOST: ${{ secrets.SSH_HOST }}
-    WORK_DIR: ${{ secrets.WORK_DIR }}     # e.g. /home/deploy/my-cv-page
-    BRANCH:   ${{ secrets.MAIN_BRANCH || 'main' }}
+name: Deploy (password via sshpass)
 
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
-    CONTAINER_NAME: my-cv-page
-    IMAGE_NAME: my-cv-page
-    PORTS: 80:80            
-  run: |
-    set -euo pipefail
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-    sshpass -p "${{ secrets.SSH_PASSWORD }}" \
-      ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
-    set -euo pipefail
+      - name: Deploy over SSH (password)
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          WORK_DIR: ${{ secrets.WORK_DIR }}      # e.g. /home/deploy/my-cv-page
+          BRANCH:   ${{ secrets.MAIN_BRANCH || 'main' }}
 
-    cd "$WORK_DIR"
+          # --- Single-container defaults (ignored if compose file exists) ---
+          CONTAINER_NAME: my-cv-page
+          IMAGE_NAME: my-cv-page
+          PORTS: 3000:3000           # change if your app uses another port
+        run: |
+          set -euo pipefail
 
-    # 1) Update repo
-    git fetch --all --prune
-    git checkout "$BRANCH" || git checkout -B "$BRANCH"
-    git reset --hard "origin/$BRANCH"
+          sshpass -p "${{ secrets.SSH_PASSWORD }}" \
+            ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
+          set -euo pipefail
 
-    # 2) If docker-compose/compose file exists, use it (auto-recreates)
-    if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yaml ]; then
-      if command -v docker-compose >/dev/null 2>&1; then
-        DC=docker-compose
-      else
-        DC="docker compose"
-      fi
-      $DC pull || true
-      $DC build --pull
-      $DC up -d --remove-orphans
-    else
-      # 3) Single-container flow: replace running container named $CONTAINER_NAME
-      CONTAINER_NAME="${CONTAINER_NAME:-my-cv-page}"
-      IMAGE_NAME="${IMAGE_NAME:-my-cv-page}"
-      PORTS="${PORTS:-80:80}"   # comma-separated becomes multiple -p flags
+          cd "$WORK_DIR"
 
-      # Stop & remove old container if present
-      CID="$(docker ps -aq -f "name=^${CONTAINER_NAME}$" || true)"
-      if [ -n "$CID" ]; then
-        docker stop "$CONTAINER_NAME" || true
-        docker rm "$CONTAINER_NAME" || true
-      fi
+          # 1) Update repo
+          git fetch --all --prune
+          git checkout "$BRANCH" || git checkout -B "$BRANCH"
+          git reset --hard "origin/$BRANCH"
 
-      # Build new image (uses Dockerfile in WORK_DIR)
-      docker build -t "$IMAGE_NAME:latest" .
+          # 2) If docker-compose/compose file exists, use it (auto-recreates)
+          if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yaml ]; then
+            if command -v docker-compose >/dev/null 2>&1; then
+              DC=docker-compose
+            else
+              DC="docker compose"
+            fi
+            $DC pull || true
+            $DC build --pull
+            $DC up -d --remove-orphans
+          else
+            # 3) Single-container flow: replace running container named $CONTAINER_NAME
+            CONTAINER_NAME="${CONTAINER_NAME:-my-cv-page}"
+            IMAGE_NAME="${IMAGE_NAME:-my-cv-page}"
+            PORTS="${PORTS:-3000:3000}"   # comma-separated becomes multiple -p flags
 
-      # Expand comma-separated ports to multiple -p flags
-      PORT_FLAGS=""
-      IFS=',' read -ra PARR <<< "$PORTS"
-      for p in "${PARR[@]}"; do
-        PORT_FLAGS="$PORT_FLAGS -p ${p//[[:space:]]/}"
-      done
+            # Stop & remove old container if present
+            CID="$(docker ps -aq -f "name=^${CONTAINER_NAME}$" || true)"
+            if [ -n "$CID" ]; then
+              docker stop "$CONTAINER_NAME" || true
+              docker rm "$CONTAINER_NAME" || true
+            fi
 
-      # Run new container
-      eval docker run -d --name "$CONTAINER_NAME" --restart unless-stopped $PORT_FLAGS "$IMAGE_NAME:latest"
-    fi
+            # Build new image (uses Dockerfile in WORK_DIR)
+            docker build -t "$IMAGE_NAME:latest" .
 
-    # 4) Cleanup dangling images (optional)
-    docker image prune -f || true
-    EOF
+            # Expand comma-separated ports to multiple -p flags
+            PORT_FLAGS=""
+            IFS=',' read -ra PARR <<< "$PORTS"
+            for p in "${PARR[@]}"; do
+              PORT_FLAGS="$PORT_FLAGS -p ${p//[[:space:]]/}"
+            done
+
+            # Run new container
+            eval docker run -d --name "$CONTAINER_NAME" --restart unless-stopped $PORT_FLAGS "$IMAGE_NAME:latest"
+          fi
+
+          # 4) Optional: nudge certbot (safe; renews only when due) and reload nginx
+          if command -v certbot >/dev/null 2>&1; then
+            certbot renew --quiet || true
+            systemctl reload nginx || true
+          fi
+
+          # 5) Cleanup dangling images (optional)
+          docker image prune -f || true
+EOF
