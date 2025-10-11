@@ -1,85 +1,124 @@
-name: Deploy (password via sshpass)
+- name: Deploy over SSH
+  env:
+    SSH_USER: ${{ secrets.SSH_USER }}
+    SSH_HOST: ${{ secrets.SSH_HOST }}
+    SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    REPO_URL: ${{ secrets.REPO_URL }}                   
+    WORK_DIR: ${{ secrets.WORK_DIR }}                   
+    BRANCH:   ${{ secrets.MAIN_BRANCH || 'main' }}
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
+    CONTAINER_NAME: my-cv-page
+    IMAGE_NAME: my-cv-page
+    HOST_PORT: "3000"                                
+    DOMAIN: "vytautasvilkas.lt"
+    EMAIL: "admin@vytautasvilkas.lt"
+  run: |
+    set -euo pipefail
+    sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+      "export REPO_URL='$REPO_URL' WORK_DIR='$WORK_DIR' BRANCH='$BRANCH' \
+              IMAGE_NAME='$IMAGE_NAME' CONTAINER_NAME='$CONTAINER_NAME' HOST_PORT='$HOST_PORT' \
+              DOMAIN='$DOMAIN' EMAIL='$EMAIL'; bash -s" <<'EOF'
+    set -euo pipefail
 
-      - name: Deploy over SSH (password)
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          WORK_DIR: ${{ secrets.WORK_DIR }}      # e.g. /home/deploy/my-cv-page
-          BRANCH:   ${{ secrets.MAIN_BRANCH || 'main' }}
+    # 0) Sanity defaults (still OK if some were empty)
+    : "${WORK_DIR:=/root/CvWebSite}"
+    : "${BRANCH:=main}"
 
-          # --- Single-container defaults (ignored if compose file exists) ---
-          CONTAINER_NAME: my-cv-page
-          IMAGE_NAME: my-cv-page
-          PORTS: 3000:3000           # change if your app uses another port
-        run: |
-          set -euo pipefail
+    # 1) Ensure working directory exists and repo is present
+    sudo mkdir -p "$WORK_DIR"
+    sudo chown -R "$USER":"$USER" "$WORK_DIR"
 
-          sshpass -p "${{ secrets.SSH_PASSWORD }}" \
-            ssh -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" bash -s <<'EOF'
-          set -euo pipefail
+    if [ ! -d "$WORK_DIR/.git" ]; then
+      if [ -z "${REPO_URL:-}" ]; then
+        echo "REPO_URL is not set and repo not present. Aborting." >&2
+        exit 1
+      fi
+      git clone --branch "$BRANCH" --single-branch "$REPO_URL" "$WORK_DIR"
+    else
+      cd "$WORK_DIR"
+      git fetch --all --prune
+      git checkout "$BRANCH" || git checkout -B "$BRANCH"
+      git reset --hard "origin/$BRANCH"
+    fi
 
-          cd "$WORK_DIR"
+    cd "$WORK_DIR"
 
-          # 1) Update repo
-          git fetch --all --prune
-          git checkout "$BRANCH" || git checkout -B "$BRANCH"
-          git reset --hard "origin/$BRANCH"
+    # 2) Build image
+    IMAGE_NAME="${IMAGE_NAME:-my-cv-page}"
+    docker build -t "$IMAGE_NAME:latest" .
 
-          # 2) If docker-compose/compose file exists, use it (auto-recreates)
-          if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yaml ]; then
-            if command -v docker-compose >/dev/null 2>&1; then
-              DC=docker-compose
-            else
-              DC="docker compose"
-            fi
-            $DC pull || true
-            $DC build --pull
-            $DC up -d --remove-orphans
-          else
-            # 3) Single-container flow: replace running container named $CONTAINER_NAME
-            CONTAINER_NAME="${CONTAINER_NAME:-my-cv-page}"
-            IMAGE_NAME="${IMAGE_NAME:-my-cv-page}"
-            PORTS="${PORTS:-3000:3000}"   # comma-separated becomes multiple -p flags
+    # 3) Replace running container
+    CONTAINER_NAME="${CONTAINER_NAME:-my-cv-page}"
+    if docker ps -aq -f "name=^${CONTAINER_NAME}$" | grep -q .; then
+      docker rm -f "$CONTAINER_NAME" || true
+    fi
+    HOST_PORT="${HOST_PORT:-3000}"
+    docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+      -p "${HOST_PORT}:80" \
+      "$IMAGE_NAME:latest"
 
-            # Stop & remove old container if present
-            CID="$(docker ps -aq -f "name=^${CONTAINER_NAME}$" || true)"
-            if [ -n "$CID" ]; then
-              docker stop "$CONTAINER_NAME" || true
-              docker rm "$CONTAINER_NAME" || true
-            fi
+    # 4) Host Nginx vhost (overwrite each deploy = consistent)
+    DOMAIN="${DOMAIN:-example.com}"
+    sudo mkdir -p /var/www/certbot
+    sudo tee /etc/nginx/sites-available/${DOMAIN}.conf > /dev/null <<NGINX
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name ${DOMAIN} www.${DOMAIN};
 
-            # Build new image (uses Dockerfile in WORK_DIR)
-            docker build -t "$IMAGE_NAME:latest" .
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
 
-            # Expand comma-separated ports to multiple -p flags
-            PORT_FLAGS=""
-            IFS=',' read -ra PARR <<< "$PORTS"
-            for p in "${PARR[@]}"; do
-              PORT_FLAGS="$PORT_FLAGS -p ${p//[[:space:]]/}"
-            done
+        return 301 https://\$host\$request_uri;
+    }
 
-            # Run new container
-            eval docker run -d --name "$CONTAINER_NAME" --restart unless-stopped $PORT_FLAGS "$IMAGE_NAME:latest"
-          fi
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name ${DOMAIN} www.${DOMAIN};
 
-          # 4) Optional: nudge certbot (safe; renews only when due) and reload nginx
-          if command -v certbot >/dev/null 2>&1; then
-            certbot renew --quiet || true
-            systemctl reload nginx || true
-          fi
+        ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
-          # 5) Cleanup dangling images (optional)
-          docker image prune -f || true
-          EOF
+        ssl_session_timeout 1d;
+        ssl_session_cache shared:SSL:10m;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        location / {
+            proxy_pass http://127.0.0.1:${HOST_PORT};
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+    }
+    NGINX
+
+    sudo ln -sf /etc/nginx/sites-available/${DOMAIN}.conf /etc/nginx/sites-enabled/${DOMAIN}.conf
+    sudo nginx -t && (sudo systemctl reload nginx || sudo service nginx reload)
+
+    # 5) Certs (issue once, renew later)
+    if ! command -v certbot >/dev/null 2>&1; then
+      if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y certbot
+      fi
+    fi
+
+    if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+      EMAIL="${EMAIL:-admin@${DOMAIN}}"
+      sudo certbot certonly --agree-tos --no-eff-email -m "${EMAIL}" \
+        -d "${DOMAIN}" -d "www.${DOMAIN}" \
+        --webroot -w /var/www/certbot --non-interactive || true
+      sudo nginx -t && (sudo systemctl reload nginx || sudo service nginx reload)
+    else
+      sudo certbot renew --quiet || true
+    fi
+
+    # 6) Health check
+    curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null
+
+    # 7) Cleanup
+    docker image prune -f || true
+    EOF
