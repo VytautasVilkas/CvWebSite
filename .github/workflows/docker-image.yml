@@ -8,12 +8,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Deploy over SSH (key auth)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
+          key:      ${{ secrets.SSH_KEY }}
+          port:     ${{ secrets.SSH_PORT || 22 }}
           script_stop: true
           envs: REPO_URL,WORK_DIR,MAIN_BRANCH
           script: |
@@ -22,12 +23,13 @@ jobs:
 
             REPO_URL="${{ secrets.REPO_URL }}"
             WORK_DIR="${{ secrets.WORK_DIR }}"
-            BRANCH="${{ secrets.MAIN_BRANCH }}"
+            BRANCH="${{ secrets.MAIN_BRANCH || 'main' }}"
+            [ -n "$BRANCH" ] || BRANCH="main"
 
             REPO_NAME="my-cv-page"
             REPO_DIR="$WORK_DIR/$REPO_NAME"
 
-            # 0) Docker present (ignore systemd errors on images without service files)
+            # Docker (ignore systemd enable errors on some images)
             if ! command -v docker >/dev/null 2>&1; then
               if command -v apt-get >/dev/null 2>&1; then
                 apt-get update && apt-get install -y docker.io || true
@@ -38,11 +40,10 @@ jobs:
               systemctl start docker || true
             fi
 
-            # 1) Ensure parent dir
             mkdir -p "$WORK_DIR"
             chown -R "$USER:$USER" "$WORK_DIR"
 
-            # 2) Clone or update repo into REPO_DIR
+            # Clone or update repo
             if [ -d "$REPO_DIR/.git" ]; then
               cd "$REPO_DIR"
               git fetch --all --prune
@@ -50,7 +51,7 @@ jobs:
               git reset --hard "origin/$BRANCH"
             else
               if [ -e "$REPO_DIR" ] && [ -n "$(ls -A "$REPO_DIR" 2>/dev/null || true)" ]; then
-                echo "ERROR: $REPO_DIR exists and is not a git repo. Remove it or use another path." >&2
+                echo "ERROR: $REPO_DIR exists and isn't a git repo. Remove it or choose another path." >&2
                 exit 1
               fi
               rm -rf "$REPO_DIR"
@@ -58,11 +59,10 @@ jobs:
               cd "$REPO_DIR"
             fi
 
-            # 3) Build & run container from subfolder with Dockerfile
-            cd "$REPO_DIR"
+            # Build & run
             IMAGE_NAME="my-cv-page"
             CONTAINER_NAME="my-cv-page"
-            HOST_PORT="3000"     # host → container:80
+            HOST_PORT="3000"
 
             docker build -t "$IMAGE_NAME:latest" .
 
@@ -74,7 +74,7 @@ jobs:
               -p "${HOST_PORT}:80" \
               "$IMAGE_NAME:latest"
 
-            # 4) Health wait
+            # Health
             for i in $(seq 1 45); do
               if curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null; then
                 echo "App is up on :${HOST_PORT}"
@@ -84,7 +84,7 @@ jobs:
             done
             curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null || (docker logs --tail=200 "$CONTAINER_NAME" || true; exit 1)
 
-            # 5) Nginx vhost
+            # Nginx vhost
             DOMAIN="vytautasvilkas.lt"
             mkdir -p /var/www/certbot
             cat >/etc/nginx/sites-available/${DOMAIN}.conf <<'NGINX'
@@ -120,7 +120,7 @@ jobs:
             ln -sf /etc/nginx/sites-available/${DOMAIN}.conf /etc/nginx/sites-enabled/${DOMAIN}.conf
             nginx -t && (systemctl reload nginx || service nginx reload)
 
-            # 6) Certs
+            # Certs
             if ! command -v certbot >/dev/null 2>&1; then
               if command -v apt-get >/dev/null 2>&1; then
                 apt-get update && apt-get install -y certbot
@@ -138,3 +138,4 @@ jobs:
             fi
 
             docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
