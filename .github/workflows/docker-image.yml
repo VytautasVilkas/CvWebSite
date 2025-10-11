@@ -21,12 +21,12 @@ jobs:
 
               # --- config from secrets ---
               REPO_URL="${{ secrets.REPO_URL }}"
-              WORK_DIR="${{ secrets.WORK_DIR }}"         # e.g. /root/CvWebSite (repo root with .git)
+              WORK_DIR="${{ secrets.WORK_DIR }}"         
               BRANCH="${{ secrets.MAIN_BRANCH }}"
               : "${BRANCH:=main}"
 
               REPO_ROOT="$WORK_DIR"
-              APP_DIR="$WORK_DIR/my-cv-page"             # subfolder with Dockerfile + nginx.conf
+              APP_DIR="$WORK_DIR/my-cv-page"             
               DOMAIN="vytautasvilkas.lt"
               EMAIL="admin@vytautasvilkas.lt"
 
