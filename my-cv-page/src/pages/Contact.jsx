@@ -12,7 +12,7 @@ function Contact() {
   return (
     <section id="contact" className="py-12 flex items-center justify-center bg-white p-6">
 
-      <div className="w-full max-w-xl bg-white shadow-lg rounded-lg p-8 text-center">
+      <div className="w-full max-w-xl bg-dark shadow-lg rounded-lg p-8 text-center">
         <h3 className="text-3xl font-bold text-gray-800 mb-6">Contact</h3>
 
         {/* Centered Lottie Animation */}
