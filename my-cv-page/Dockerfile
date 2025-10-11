@@ -1,38 +1,30 @@
-# --- Build stage: force-install tailwind deps inside image ---
+# --- Build stage ---
 FROM node:20 AS build
 WORKDIR /app
 
-# Copy manifests first for better caching
+# Copy only manifests first for caching
 COPY package.json package-lock.json ./
 
-# Install regular deps AND devDeps
-ENV NPM_CONFIG_PRODUCTION=false
-RUN npm ci --legacy-peer-deps
+# Install app deps (incl. dev) and force-resolve peers
+# (legacy-peer-deps prevents the React 19 vs typewriter-effect conflict)
+RUN npm install --legacy-peer-deps
 
-# 🔧 Force-install Tailwind + Vite plugin + PostCSS deps (even if not in package.json)
-RUN npm i -D tailwindcss postcss autoprefixer @tailwindcss/vite
+# Force-install Tailwind deps inside the image (no repo change)
+RUN npm install -D tailwindcss postcss autoprefixer @tailwindcss/vite --legacy-peer-deps --no-save
 
-# Bring in the rest of the app
+# Now copy the source and build
 COPY . .
-
-# Optional: fail early if plugin is missing (sanity check)
+# Optional sanity check: make sure plugin resolves
 RUN node -e "require.resolve('@tailwindcss/vite')"
-
-# Build
 RUN npm run build
 
-# --- Runtime stage: static files only ---
+# --- Runtime stage ---
 FROM nginx:1.27-alpine
 WORKDIR /usr/share/nginx/html
 RUN rm -rf ./*
-
-# Copy built assets
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Tiny SPA server config (inside the container, not your host nginx)
+COPY --from=build /app/dist ./
+# Minimal SPA nginx (this is *container* nginx, not your host reverse proxy)
 RUN printf 'server { listen 80; root /usr/share/nginx/html; index index.html; try_files $uri /index.html; }' \
   > /etc/nginx/conf.d/default.conf
-
 EXPOSE 80
 CMD ["nginx","-g","daemon off;"]
-
