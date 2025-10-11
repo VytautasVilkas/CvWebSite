@@ -8,15 +8,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH (key auth)
+      - name: Deploy over SSH (password auth)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          key:      ${{ secrets.SSH_KEY }}
+          password: ${{ secrets.SSH_PASSWORD }}
           port:     ${{ secrets.SSH_PORT || 22 }}
           script_stop: true
-          envs: REPO_URL,WORK_DIR,MAIN_BRANCH
           script: |
             set -euo pipefail
             set -x
@@ -29,7 +28,7 @@ jobs:
             REPO_NAME="my-cv-page"
             REPO_DIR="$WORK_DIR/$REPO_NAME"
 
-            # Docker (ignore systemd enable errors on some images)
+            # Docker
             if ! command -v docker >/dev/null 2>&1; then
               if command -v apt-get >/dev/null 2>&1; then
                 apt-get update && apt-get install -y docker.io || true
@@ -40,10 +39,9 @@ jobs:
               systemctl start docker || true
             fi
 
-            mkdir -p "$WORK_DIR"
-            chown -R "$USER:$USER" "$WORK_DIR"
+            mkdir -p "$WORK_DIR"; chown -R "$USER:$USER" "$WORK_DIR"
 
-            # Clone or update repo
+            # Clone or update repo in REPO_DIR
             if [ -d "$REPO_DIR/.git" ]; then
               cd "$REPO_DIR"
               git fetch --all --prune
@@ -74,7 +72,7 @@ jobs:
               -p "${HOST_PORT}:80" \
               "$IMAGE_NAME:latest"
 
-            # Health
+            # Health check
             for i in $(seq 1 45); do
               if curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null; then
                 echo "App is up on :${HOST_PORT}"
@@ -138,4 +136,3 @@ jobs:
             fi
 
             docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-
