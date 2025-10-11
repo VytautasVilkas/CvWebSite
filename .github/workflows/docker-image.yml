@@ -1,133 +1,105 @@
-name: Deploy (sshpass)
+- name: Pull + Deploy over SSH (password)
+  env:
+    SSH_HOST: ${{ secrets.SSH_HOST }}
+    SSH_USER: ${{ secrets.SSH_USER }}
+    SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+    REPO_URL: ${{ secrets.REPO_URL }}
+    WORK_DIR: ${{ secrets.WORK_DIR }}
+    MAIN_BRANCH: ${{ secrets.MAIN_BRANCH }}
+  run: |
+    sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no \
+      "$SSH_USER@$SSH_HOST" bash -lc '
+        set -euo pipefail
+        set -x
 
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
+        REPO_URL="${REPO_URL:-'"$REPO_URL"'}"
+        WORK_DIR="${WORK_DIR:-'"$WORK_DIR"'}"
+        BRANCH="${MAIN_BRANCH:-main}"
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
+        REPO_ROOT="$WORK_DIR"
+        APP_DIR="$WORK_DIR/my-cv-page"
+        DOMAIN="vytautasvilkas.lt"
+        EMAIL="admin@vytautasvilkas.lt"
 
-      - name: Pull + Deploy over SSH (password)
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-          REPO_URL: ${{ secrets.REPO_URL }}
-          WORK_DIR: ${{ secrets.WORK_DIR }}
-          MAIN_BRANCH: ${{ secrets.MAIN_BRANCH }}
-        run: |
-          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no \
-            "$SSH_USER@$SSH_HOST" "export REPO_URL='$REPO_URL' WORK_DIR='$WORK_DIR' BRANCH='${MAIN_BRANCH:-main}'; bash -s" <<'EOF'
-          set -euo pipefail
-          set -x
+        if command -v apt-get >/dev/null 2>&1; then
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y git curl nginx certbot docker.io || true
+          sudo systemctl enable --now docker || true
+          sudo systemctl enable --now nginx  || true
+        fi
 
-          # ---- config ----
-          : "${BRANCH:=main}"
-          REPO_ROOT="$WORK_DIR"                 # repo root (has .git)
-          APP_DIR="$WORK_DIR/my-cv-page"        # Dockerfile + nginx.conf
-          DOMAIN="vytautasvilkas.lt"
-          EMAIL="admin@vytautasvilkas.lt"
-
-          # ---- pkgs/services ----
-          if command -v apt-get >/dev/null 2>&1; then
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get update
-            sudo apt-get install -y git curl nginx certbot docker.io || true
-            sudo systemctl enable --now docker || true
-            sudo systemctl enable --now nginx  || true
+        sudo mkdir -p "$REPO_ROOT"
+        sudo chown -R "$USER:$USER" "$REPO_ROOT"
+        if [ -d "$REPO_ROOT/.git" ]; then
+          cd "$REPO_ROOT"
+          git fetch --all --prune
+          git checkout "$BRANCH" || git checkout -B "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+        else
+          mkdir -p "$REPO_ROOT"
+          cd "$REPO_ROOT"
+          if ! git rev-parse --git-dir >/dev/null 2>&1; then
+            git init
+            git remote remove origin >/dev/null 2>&1 || true
+            git remote add origin "'"$REPO_URL"'"
           fi
+          git fetch --depth=1 origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH" || git checkout -B "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+          git clean -fdx || true
+        fi
 
-          # ---- repo update (root) ----
-          sudo mkdir -p "$REPO_ROOT"
-          sudo chown -R "$USER:$USER" "$REPO_ROOT"
-          if [ -d "$REPO_ROOT/.git" ]; then
-            cd "$REPO_ROOT"
-            git fetch --all --prune
-            git checkout "$BRANCH" || git checkout -B "$BRANCH"
-            git reset --hard "origin/$BRANCH"
-          else
-            mkdir -p "$REPO_ROOT"
-            cd "$REPO_ROOT"
-            if ! git rev-parse --git-dir >/dev/null 2>&1; then
-              git init
-              git remote remove origin >/dev/null 2>&1 || true
-              git remote add origin "$REPO_URL"
-            fi
-            git fetch --depth=1 origin "$BRANCH"
-            git checkout -B "$BRANCH" "origin/$BRANCH" || git checkout -B "$BRANCH"
-            git reset --hard "origin/$BRANCH"
-            git clean -fdx || true
+        if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+          sudo systemctl stop nginx || true
+          sudo certbot certonly --standalone --preferred-challenges http \
+            --agree-tos --no-eff-email -m "$EMAIL" \
+            -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive || true
+          sudo systemctl start nginx || true
+        else
+          sudo certbot renew --quiet || true
+        fi
+
+        sudo mkdir -p /var/www/certbot
+        tmp_conf="/etc/nginx/sites-available/${DOMAIN}.conf"
+        sudo install -m 644 "$APP_DIR/nginx.conf" "$tmp_conf"
+        if ! grep -q "location ~ /\." "$tmp_conf"; then
+          sudo sed -i "/server_name .*${DOMAIN}.*/a \
+    location ~ /\. { deny all; }" "$tmp_conf"
+        fi
+        sudo ln -sf "$tmp_conf" "/etc/nginx/sites-enabled/${DOMAIN}.conf"
+        for f in /etc/nginx/sites-enabled/*; do
+          [ -e "$f" ] || continue
+          [ "$f" = "/etc/nginx/sites-enabled/${DOMAIN}.conf" ] && continue
+          if grep -qE "server_name\s+(www\.)?${DOMAIN}\b" "$f"; then
+            sudo rm -f "$f"
           fi
+        done
+        sudo rm -f /etc/nginx/sites-enabled/default || true
+        sudo nginx -t
+        sudo systemctl reload nginx || sudo service nginx reload
 
-          # ---- certs (first-run only) ----
-          if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-            sudo systemctl stop nginx || true
-            sudo certbot certonly --standalone --preferred-challenges http \
-              --agree-tos --no-eff-email -m "$EMAIL" \
-              -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive || true
-            sudo systemctl start nginx || true
-          else
-            sudo certbot renew --quiet || true
+        cd "$APP_DIR"
+        IMAGE_NAME="my-cv-page"
+        CONTAINER_NAME="my-cv-page"
+        HOST_PORT="3000"
+
+        sudo docker build --pull -t "$IMAGE_NAME:latest" .
+        if sudo docker ps -aq -f "name=^${CONTAINER_NAME}$" | grep -q .; then
+          sudo docker rm -f "$CONTAINER_NAME" || true
+        fi
+        sudo docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+          -p "${HOST_PORT}:80" \
+          "$IMAGE_NAME:latest"
+
+        for i in $(seq 1 45); do
+          if curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null; then
+            echo "App is up on :${HOST_PORT}"
+            break
           fi
-
-          # ---- install vhost (your file); ensure single enabled site for this domain ----
-          sudo mkdir -p /var/www/certbot
-          tmp_conf="/etc/nginx/sites-available/${DOMAIN}.conf"
-
-          # copy your repo nginx.conf, plus a tiny hardening for dotfiles
-          sudo tee "$tmp_conf" >/dev/null < "$APP_DIR/nginx.conf"
-          if ! grep -q 'location ~ /\.' "$tmp_conf"; then
-            sudo sed -i '/server_name .*'"$DOMAIN"'.*/a \
-          location ~ /\. { deny all; }' "$tmp_conf"
-                fi
-
-                sudo ln -sf "$tmp_conf" "/etc/nginx/sites-enabled/${DOMAIN}.conf"
-
-                # disable any other *enabled* file that also serves this domain (avoid conflicts)
-                for f in /etc/nginx/sites-enabled/*; do
-                  [ -e "$f" ] || continue
-                  [ "$f" = "/etc/nginx/sites-enabled/${DOMAIN}.conf" ] && continue
-                  if grep -qE 'server_name\s+(www\.)?'"$DOMAIN"'\b' "$f"; then
-                    sudo rm -f "$f"
-                  fi
-                done
-
-                sudo nginx -t
-                sudo systemctl reload nginx || sudo service nginx reload
-
-                # ---- build & run ONLY this app container ----
-                cd "$APP_DIR"
-                IMAGE_NAME="my-cv-page"
-                CONTAINER_NAME="my-cv-page"
-                HOST_PORT="3000"   # host -> container:80
-
-                # build with dev deps so @tailwindcss/vite is available
-                sudo docker build --pull -t "$IMAGE_NAME:latest" .
-
-                if sudo docker ps -aq -f "name=^${CONTAINER_NAME}$" | grep -q .; then
-                  sudo docker rm -f "$CONTAINER_NAME" || true
-                fi
-
-                sudo docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
-                  -p "${HOST_PORT}:80" \
-                  "$IMAGE_NAME:latest"
-
-                # ---- health check ----
-                for i in $(seq 1 45); do
-                  if curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null; then
-                    echo "App is up on :${HOST_PORT}"
-                    break
-                  fi
-                  sleep 1
-                done
-                curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null || (sudo docker logs --tail=200 "$CONTAINER_NAME" || true; exit 1)
-
-                # quick sanity
-                curl -k -I -H "Host: $DOMAIN" https://127.0.0.1 || true
-                sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-                EOF
+          sleep 1
+        done
+        curl -fsS "http://127.0.0.1:${HOST_PORT}/" >/dev/null || (sudo docker logs --tail=200 "$CONTAINER_NAME" || true; exit 1)
+        curl -k -I -H "Host: $DOMAIN" https://127.0.0.1 || true
+        sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      '
