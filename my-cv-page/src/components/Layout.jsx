@@ -4,12 +4,15 @@ import Footer from './Footer';
 
 function Layout({ children }) {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="min-h-screen flex flex-col bg-black text-green-400 font-mono">
       <Navbar />
-      <main className="flex-grow container mx-auto p-6">{children}</main>
+      <main className="flex-grow container mx-auto px-6 py-10">
+        {children}
+      </main>
       <Footer />
     </div>
   );
 }
 
 export default Layout;
+
