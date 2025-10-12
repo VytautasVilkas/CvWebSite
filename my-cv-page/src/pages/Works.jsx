@@ -2,15 +2,15 @@ import React from "react";
 import { FaGithub } from "react-icons/fa"; // Import GitHub icon
 
 function RecentWorks() {
-  const works = [
-    {
-      title: "MindaugasAntique",
-      description:
-        "An elegant web application designed for showcasing and selling antique items. Built with React and ASP.NET Core, featuring a user-friendly interface.",
-      techStack: ["React.js", "ASP.NET Core", "Microsoft SQL Server", "Docker"],
-      link: "https://mindaugasantique.cloud",
-    },
-  ];
+  // const works = [
+  //   {
+  //     title: "MindaugasAntique",
+  //     description:
+  //       "An elegant web application designed for showcasing and selling antique items. Built with React and ASP.NET Core, featuring a user-friendly interface.",
+  //     techStack: ["React.js", "ASP.NET Core", "Microsoft SQL Server", "Docker"],
+  //     link: "https://mindaugasantique.cloud",
+  //   },
+  // ];
 
   const githubLink = "https://github.com/VytautasVilkas"; 
 
