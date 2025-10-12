@@ -1,10 +1,12 @@
 function Education() {
+  const NAV_OFFSET = 80; 
+
   const educationData = [
     {
       school: "Kaunas University of Technology",
       degree: "Master's degree, Music Theory and Composition",
       period: "Sep 2020 – Jan 2022",
-      skills: ["Steinberg Nuendo", "Ableton Live", "Cubase", "Cycling '74", "Max"],
+      skills: ["Steinberg Nuendo", "Ableton Live", "Cubase", "Cycling '74', 'Max"],
     },
     {
       school: "CodeAcademy",
@@ -27,6 +29,15 @@ function Education() {
       skills: ["Steinberg Nuendo", "Ableton Live", "Cubase", "Cycling '74", "Max"],
     },
   ];
+
+  function goHome(e) {
+    e.preventDefault();
+    const el = document.querySelector("#home");
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY - NAV_OFFSET;
+    window.scrollTo({ top: y, behavior: "smooth" });
+  }
+
   return (
     <section
       id="education"
@@ -34,20 +45,26 @@ function Education() {
     >
       <div className="w-full max-w-4xl">
         <div className="rounded-xl border border-green-500/30 bg-black shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black text-xs tracking-widest text-green-300/80">
-            <span>C:\Windows\System32\cmd.exe</span>
-            <span>[Admin]</span>
-          </div>
-          <div className="p-6">
-            <div className="mb-8 text-center">
-              <div className="text-sm text-green-300/80 select-none">
-                C://edu <span className="blink-cursor">_</span>
-              </div>
-              <h1 className="text-3xl font-bold text-green-200 mt-2 tracking-wide">
-                Education
-              </h1>
+          <div className="flex items-center justify-between px-3 py-2 border-b border-green-500/20 bg-gradient-to-r from-black to-green-900/10">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 bg-green-500/70 rounded-sm shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
+              <span className="text-green-200 text-xs tracking-wide select-none">
+                education.exe
+              </span>
             </div>
 
+            <button
+              type="button"
+              onClick={goHome}
+              className="w-8 h-6 grid place-items-center rounded text-green-100 bg-green-500/20 hover:bg-red-500/40 hover:text-white transition-colors"
+              aria-label="Close"
+              title="Close (go home)"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-6">
             <ul className="space-y-6">
               {educationData.map((edu, index) => (
                 <li
@@ -57,6 +74,7 @@ function Education() {
                   <h2 className="text-xl font-semibold text-green-100">{edu.school}</h2>
                   <p className="text-green-300/90">{edu.degree}</p>
                   <p className="text-xs text-green-400/70 mt-1">{edu.period}</p>
+
                   <div className="mt-4">
                     <h3 className="text-sm font-semibold text-green-300/90 mb-2">skills</h3>
                     <div className="flex flex-wrap gap-2">
@@ -75,12 +93,9 @@ function Education() {
             </ul>
           </div>
         </div>
+
         <div className="border-t border-green-500/20 mt-6" />
       </div>
-      <style>{`
-        @keyframes blinkCursor { 0%,49% {opacity:1;} 50%,100% {opacity:0;} }
-        .blink-cursor { animation: blinkCursor 1s step-start infinite; }
-      `}</style>
     </section>
   );
 }
