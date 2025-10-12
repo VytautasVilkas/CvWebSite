@@ -1,37 +1,31 @@
 import React, { createContext, useEffect, useState } from "react";
 export const LayoutContext = createContext();
+
 function ResponsiveWrapper({ children }) {
-  const [layout, setLayout] = useState("desktop"); // 'desktop', 'tablet', or 'mobile'
+  const [layout, setLayout] = useState("desktop"); 
+
   useEffect(() => {
     const updateLayout = () => {
-      const screenWidth = window.innerWidth;
-      if (screenWidth < 768) {
-        setLayout("mobile");
-      } else if (screenWidth >= 768 && screenWidth < 1024) {
-        setLayout("tablet");
-      } else {
-        setLayout("desktop");
-      }
+      const w = window.innerWidth;
+      if (w < 768) setLayout("mobile");
+      else if (w < 1024) setLayout("tablet");
+      else setLayout("desktop");
     };
-    updateLayout(); 
-    window.addEventListener("resize", updateLayout); 
-    return () => {
-      window.removeEventListener("resize", updateLayout);
-    };
+    updateLayout();
+    window.addEventListener("resize", updateLayout);
+    return () => window.removeEventListener("resize", updateLayout);
   }, []);
-  console.log("ResponsiveWrapper Layout:", layout);
+
   return (
     <LayoutContext.Provider value={layout}>
       <div
-        className="min-h-screen w-full flex justify-center "
-        style={{
-          overflowX: "hidden", 
-        }}
+        className="min-h-screen w-full bg-black text-green-400 font-mono"
+        style={{ overflowX: "hidden" }}
       >
         <div
-          className={`w-full ${
+          className={`mx-auto w-full ${
             layout === "desktop" ? "max-w-screen-xl" : "max-w-3xl"
-          } p-4`}
+          } px-4 sm:px-6 lg:px-8 py-6`}
         >
           {children}
         </div>
@@ -39,5 +33,4 @@ function ResponsiveWrapper({ children }) {
     </LayoutContext.Provider>
   );
 }
-
 export default ResponsiveWrapper;
