@@ -34,7 +34,8 @@ function Navbar() {
 
       <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-3 text-green-400 font-mono">
         <div className="text-sm text-green-300/80 select-none">
-          C:\\Portfolio\\Vytautas&gt;<span className="text-green-100 blink-cursor">_</span>
+          C:\\Users\\Vytautas\\navigation_bar&gt;
+          <span className="text-green-100 blink-cursor">_</span>
         </div>
         <nav className="hidden sm:flex gap-6 text-sm tracking-wide">
           {links.map((link) => (
