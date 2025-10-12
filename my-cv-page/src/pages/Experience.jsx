@@ -16,7 +16,7 @@ function Experience() {
       period: "Jun 2023 – Present · Vilnius, Lithuania · Hybrid",
       desc:
         "I build internal tools for warehouse and operations: stock management, inter-warehouse transfers, item movement tracking, and work orders for tea packaging and coffee production. I also develop accounting support tools—vehicle/route tracking, fuel-usage logging, and fuel-station receipt checks—to help accountants reconcile costs and monitor fleet usage.",
-      skills: [".NET Core","ADO.NET","Microsoft SQL Server","Visual Basic .NET (VB.NET)"],
+      skills: [".NET Core","ASP.NET Core","ADO.NET","Microsoft SQL Server","Visual Basic .NET (VB.NET)"],
     },
     {
       title: "Freelance Software Developer",
