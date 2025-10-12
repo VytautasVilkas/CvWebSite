@@ -36,9 +36,15 @@ function Education() {
       className="min-h-screen scroll-mt-[80px] bg-black text-green-400 font-mono flex items-center justify-center px-6 py-12"
     >
       <div className="w-full max-w-4xl">
-        <h1 className="text-3xl font-bold text-green-200 text-center mb-8 tracking-wide">
-          Education
-        </h1>
+        {/* CMD-like header */}
+        <div className="mb-8">
+          <div className="text-sm text-green-300/80 select-none">
+            C://edu <span className="blink-cursor">_</span>
+          </div>
+          <h1 className="text-3xl font-bold text-green-200 mt-2 text-center tracking-wide">
+            Education
+          </h1>
+        </div>
 
         <ul className="space-y-6">
           {educationData.map((edu, index) => (
@@ -69,6 +75,12 @@ function Education() {
 
         <div className="border-t border-green-500/20 mt-6" />
       </div>
+
+      {/* local blink style (same as navbar/experience) */}
+      <style>{`
+        @keyframes blinkCursor { 0%,49% {opacity:1;} 50%,100% {opacity:0;} }
+        .blink-cursor { animation: blinkCursor 1s step-start infinite; }
+      `}</style>
     </section>
   );
 }
