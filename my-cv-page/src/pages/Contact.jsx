@@ -12,22 +12,15 @@ function Contact() {
       className="min-h-screen scroll-mt-[80px] bg-black text-green-400 font-mono flex items-center justify-center px-6 py-12"
     >
       <div className="w-full max-w-3xl">
-        {/* Terminal window */}
         <div className="rounded-xl border border-green-500/30 bg-black shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
-          {/* Title bar */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black text-xs tracking-widest text-green-300/80">
             <span>C:\Windows\System32\cmd.exe</span>
             <span>[Admin]</span>
           </div>
-
-          {/* Body */}
           <div className="p-8">
-            {/* Prompt line (left-aligned) */}
             <div className="text-sm text-green-300/80 select-none mb-4">
               C://contact <span className="blink-cursor">_</span>
             </div>
-
-            {/* Terminal-style lines */}
             <div className="space-y-2 text-sm md:text-base">
               <div>
                 <span className="text-green-300/90">C://contact&gt;</span>{" "}
