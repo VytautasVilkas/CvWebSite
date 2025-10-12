@@ -1,76 +1,203 @@
-import React from "react";
-import Typewriter from "typewriter-effect";
+import React, { useEffect, useRef, useState } from "react";
 
 function Home() {
+  const [lines, setLines] = useState([]);
+  const [input, setInput] = useState("");
+  const [history, setHistory] = useState([]);
+  const [histIndex, setHistIndex] = useState(-1);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const BlinkCSS = () => (
+    <style>
+      {`
+        @keyframes blinkCursor { 0%,49% {opacity:1;} 50%,100% {opacity:0;} }
+        .blink-cursor { animation: blinkCursor 1s step-start infinite; }
+      `}
+    </style>
+  );
+
+  const prompt = "C:\\\\Users\\\\Vytautas>";
+
+  useEffect(() => {
+    const boot = [
+      "C:\\\\Windows\\\\System32\\\\cmd.exe",
+      "[Admin]",
+      "Microsoft Windows [Version 10.0.19045]",
+      "(c) Vytautas Vilkas. All rights reserved.",
+      "",
+      `${prompt} echo Welcome`,
+      "Welcome to my portfolio terminal. Type help to explore.",
+      "",
+    ];
+    setLines(boot);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lines]);
+
+  function print(...newLines) {
+    setLines((prev) => [...prev, ...newLines]);
+  }
+
+  function navigateToAnchor(anchorId) {
+    const el = document.querySelector(anchorId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return true;
+    }
+    return false;
+  }
+
+  function handleCommand(raw) {
+    const cmd = raw.trim();
+    if (!cmd) {
+      print(`${prompt} ${raw}`);
+      return;
+    }
+
+    setHistory((h) => [cmd, ...h]);
+    setHistIndex(-1);
+
+    const [head, ...rest] = cmd.split(" ");
+    const argStr = rest.join(" ");
+
+    print(`${prompt} ${cmd}`);
+
+    switch (head.toLowerCase()) {
+      case "help":
+        print(
+          "Available commands:",
+          "  whoami                  Show identity",
+          "  skills                  List key skills",
+          "  about                   About me",
+          "  projects | github       Open GitHub profile",
+          "  goto <section>          Navigate to a section (home | experience | education | works | contact)",
+          "  echo <text>             Print text",
+          "  clear                   Clear screen"
+        );
+        break;
+
+      case "whoami":
+        print("vytautas.vilkas");
+        break;
+
+      case "skills":
+        print(".NET · C# · ASP.NET Core · React · SQL · Docker");
+        break;
+
+      case "about":
+        print(
+          "Building reliable web/desktop apps and turning complex problems into elegant solutions."
+        );
+        break;
+
+      case "projects":
+      case "github":
+        print("Opening: github.com/VytautasVilkas");
+        window.open("https://github.com/VytautasVilkas", "_blank", "noopener,noreferrer");
+        break;
+
+      case "goto": {
+        const target = argStr.toLowerCase();
+        const map = {
+          home: "#home",
+          experience: "#experience",
+          education: "#education",
+          works: "#recent-works",
+          contact: "#contact",
+        };
+        const anchor = map[target];
+        if (!anchor) {
+          print(`Unknown section: ${target}`, 'Try: "goto home", "goto experience", "goto education", "goto works", "goto contact"');
+          break;
+        }
+        const ok = navigateToAnchor(anchor);
+        print(ok ? `Navigating to ${anchor}...` : `Section not found: ${anchor}`);
+        break;
+      }
+
+      case "echo":
+        print(argStr);
+        break;
+
+      case "clear":
+        setLines([]);
+        break;
+
+      default:
+        print(`'${head}' is not recognized as an internal or external command.`);
+        break;
+    }
+  }
+
+  function onSubmit(e) {
+    e.preventDefault();
+    handleCommand(input);
+    setInput("");
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.min(histIndex + 1, history.length - 1);
+      if (history[next]) {
+        setHistIndex(next);
+        setInput(history[next]);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.max(histIndex - 1, -1);
+      setHistIndex(next);
+      setInput(next === -1 ? "" : history[next]);
+    }
+  }
+
   return (
     <section
       id="home"
       className="min-h-screen flex items-center justify-center bg-black text-green-400 font-mono"
     >
+      <BlinkCSS />
       <div className="w-full max-w-3xl mx-auto p-6">
         <div className="rounded-xl border border-green-500/30 bg-black shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black">
-            <span className="text-xs tracking-widest text-green-300/80">
-              C:\\Windows\\System32\\cmd.exe
-            </span>
-            <span className="text-xs text-green-500/70">[Admin]</span>
+          <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black text-xs tracking-widest text-green-300/80">
+            <span>C:\\Windows\\System32\\cmd.exe</span>
+            <span>[Admin]</span>
           </div>
 
-          <div className="p-4 leading-relaxed">
-            <pre className="whitespace-pre-wrap text-sm md:text-base">
-              <span className="text-green-300/80">Microsoft Windows [Version 10.0.19045]</span>
-              {"\n"}
-              <span className="text-green-300/60">(c) Vytautas Vilkas. All rights reserved.</span>
-              {"\n\n"}
-              <span className="text-green-300/90">C:\Users\Vytautas&gt; echo Welcome</span>
-              {"\n"}
-              Welcome to my portfolio terminal. Type <span className="text-green-200">help</span> to explore.
-              {"\n\n"}
+          <div className="p-4 leading-relaxed text-sm md:text-base">
+            <pre className="whitespace-pre-wrap">
+              {lines.map((l, i) => (
+                <div key={i}>{l}</div>
+              ))}
             </pre>
 
-            <div className="text-sm md:text-base">
-              <Typewriter
-                options={{
-                  loop: true,
-                  delay: 35,
-                  deleteSpeed: 12,
-                  cursor: "_",
-                }}
-                onInit={(tw) => {
-                  tw.typeString(
-                    '<span class="text-green-300/90">C:\\Users\\Vytautas&gt; whoami</span>'
-                  )
-                    .pauseFor(500)
-                    .typeString("<br/>vytautas.vilkas")
-                    .pauseFor(900)
-                    .typeString("<br/><br/><span class='text-green-300/90'>C:\\Users\\Vytautas&gt; skills</span>")
-                    .pauseFor(400)
-                    .typeString(
-                      "<br/>.NET · C# · ASP.NET Core · React · SQL · Docker"
-                    )
-                    .pauseFor(1100)
-                    .typeString("<br/><br/><span class='text-green-300/90'>C:\\Users\\Vytautas&gt; about</span>")
-                    .pauseFor(400)
-                    .typeString(
-                      "<br/>Building reliable web/desktop apps and turning complex problems into elegant solutions."
-                    )
-                    .pauseFor(1200)
-                    .typeString("<br/><br/><span class='text-green-300/90'>C:\\Users\\Vytautas&gt; projects</span>")
-                    .pauseFor(400)
-                    .typeString(
-                      "<br/>Open: <a href='https://github.com/VytautasVilkas' target='_blank' rel='noreferrer' class='underline'>github.com/VytautasVilkas</a>"
-                    )
-                    .pauseFor(2000)
-                    .deleteAll(10)
-                    .start();
-                }}
+            <form className="mt-2 flex items-center gap-2" onSubmit={onSubmit}>
+              <span className="text-green-300/90">{prompt}</span>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                className="flex-1 bg-transparent outline-none text-green-100 placeholder-green-700/60"
+                placeholder="type a command (try: help)"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
               />
-            </div>
+              <span className="text-green-100 blink-cursor select-none">_</span>
+            </form>
+
+            <div ref={endRef} />
           </div>
         </div>
 
         <p className="mt-4 text-center text-xs text-green-500/60 select-none">
-          Tip: press ↑ to cycle commands (just kidding… but you can click the GitHub link).
+          Tip: type <span className="text-green-300">help</span> or{" "}
+          <span className="text-green-300">goto experience</span>. Navbar still works if you prefer clicking.
         </p>
       </div>
     </section>
