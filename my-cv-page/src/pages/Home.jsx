@@ -5,9 +5,12 @@ function Home() {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState([]);
   const [histIndex, setHistIndex] = useState(-1);
+  const [idleHinted, setIdleHinted] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const IDLE_MS = 10000;
 
+  // blinking cursor
   const BlinkCSS = () => (
     <style>
       {`
@@ -19,6 +22,7 @@ function Home() {
 
   const prompt = "C:\\\\Users\\\\Vytautas>";
 
+  // initial banner ONLY (no echo/help block)
   useEffect(() => {
     const boot = [
       "C:\\\\Windows\\\\System32\\\\cmd.exe",
@@ -26,17 +30,34 @@ function Home() {
       "Microsoft Windows [Version 10.0.19045]",
       "(c) Vytautas Vilkas. All rights reserved.",
       "",
-      `${prompt} echo Welcome`,
-      "Welcome to my portfolio terminal. Type help to explore.",
-      "",
     ];
     setLines(boot);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
+  // autoscroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lines]);
+
+  // inactivity hint -> auto-fill `goto experience` and print hint line
+  useEffect(() => {
+    if (idleHinted) return;
+    if (input !== "") return;
+
+    const t = setTimeout(() => {
+      // print a hint line (not a command)
+      print(
+        "[hint] Type ",
+        "goto experience",
+        " and press Enter to see my work history."
+      );
+      setInput("goto experience");
+      setIdleHinted(true);
+    }, IDLE_MS);
+
+    return () => clearTimeout(t);
+  }, [input, idleHinted]);
 
   function print(...newLines) {
     setLines((prev) => [...prev, ...newLines]);
@@ -64,6 +85,7 @@ function Home() {
     const [head, ...rest] = cmd.split(" ");
     const argStr = rest.join(" ");
 
+    // echo what user typed
     print(`${prompt} ${cmd}`);
 
     switch (head.toLowerCase()) {
@@ -97,7 +119,11 @@ function Home() {
       case "projects":
       case "github":
         print("Opening: github.com/VytautasVilkas");
-        window.open("https://github.com/VytautasVilkas", "_blank", "noopener,noreferrer");
+        window.open(
+          "https://github.com/VytautasVilkas",
+          "_blank",
+          "noopener,noreferrer"
+        );
         break;
 
       case "goto": {
@@ -111,7 +137,10 @@ function Home() {
         };
         const anchor = map[target];
         if (!anchor) {
-          print(`Unknown section: ${target}`, 'Try: "goto home", "goto experience", "goto education", "goto works", "goto contact"');
+          print(
+            `Unknown section: ${target}`,
+            'Try: "goto home", "goto experience", "goto education", "goto works", "goto contact"'
+          );
           break;
         }
         const ok = navigateToAnchor(anchor);
@@ -140,6 +169,11 @@ function Home() {
   }
 
   function onKeyDown(e) {
+    // reset idle hinting if user is interacting
+    if (e.key.length === 1 || e.key === "Backspace" || e.key === "Delete") {
+      if (idleHinted) setIdleHinted(false);
+    }
+
     if (e.key === "ArrowUp") {
       e.preventDefault();
       const next = Math.min(histIndex + 1, history.length - 1);
@@ -162,12 +196,15 @@ function Home() {
     >
       <BlinkCSS />
       <div className="w-full max-w-3xl mx-auto p-6">
+        {/* Terminal Shell */}
         <div className="rounded-xl border border-green-500/30 bg-black shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
+          {/* Title bar */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black text-xs tracking-widest text-green-300/80">
             <span>C:\\Windows\\System32\\cmd.exe</span>
             <span>[Admin]</span>
           </div>
 
+          {/* Body */}
           <div className="p-4 leading-relaxed text-sm md:text-base">
             <pre className="whitespace-pre-wrap">
               {lines.map((l, i) => (
@@ -175,6 +212,7 @@ function Home() {
               ))}
             </pre>
 
+            {/* Prompt */}
             <form className="mt-2 flex items-center gap-2" onSubmit={onSubmit}>
               <span className="text-green-300/90">{prompt}</span>
               <input
@@ -195,6 +233,7 @@ function Home() {
           </div>
         </div>
 
+        {/* Hint under terminal */}
         <p className="mt-4 text-center text-xs text-green-500/60 select-none">
           Tip: type <span className="text-green-300">help</span> or{" "}
           <span className="text-green-300">goto experience</span>. Navbar still works if you prefer clicking.
