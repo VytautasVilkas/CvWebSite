@@ -21,21 +21,19 @@ function Contact() {
         </div>
 
         <div className="rounded-xl border border-green-500/30 bg-black/60 shadow-[0_0_24px_rgba(34,197,94,0.08)] p-8 text-center">
-          {/* ASCII panel */}
+          {/* ASCII panel — ultra tiny */}
           <div className="mb-6 max-h-[60vh] overflow-auto rounded-lg border border-green-500/20 bg-black/70 p-4">
-            <pre
-              className="whitespace-pre text-green-400 tracking-tight
-                         text-[4px] leading-[4px]
-                         sm:text-[5px] sm:leading-[5px]
-                         md:text-[6px] md:leading-[6px]
-                         lg:text-[7px] lg:leading-[7px]"
-              style={{
-                fontVariantLigatures: "none",
-                letterSpacing: "-0.02em",
-              }}
+            <div
+              className="inline-block origin-top-left will-change-transform
+                         scale-[0.6] sm:scale-[0.55] md:scale-[0.5] lg:scale-[0.45]"
             >
-              {ascii2}
-            </pre>
+              <pre
+                className="whitespace-pre text-green-400 tracking-tight text-[2px] leading-[2px]"
+                style={{ fontVariantLigatures: "none", letterSpacing: "-0.02em" }}
+              >
+                {ascii2}
+              </pre>
+            </div>
           </div>
 
           <p className="text-green-200/85 mb-6">
