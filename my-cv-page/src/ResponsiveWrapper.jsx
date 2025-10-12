@@ -2,7 +2,7 @@ import React, { createContext, useEffect, useState } from "react";
 export const LayoutContext = createContext();
 
 function ResponsiveWrapper({ children }) {
-  const [layout, setLayout] = useState("desktop"); 
+  const [layout, setLayout] = useState("desktop");
 
   useEffect(() => {
     const updateLayout = () => {
@@ -19,7 +19,7 @@ function ResponsiveWrapper({ children }) {
   return (
     <LayoutContext.Provider value={layout}>
       <div
-        className="min-h-screen w-full bg-black text-green-400 font-mono"
+        className="min-h-screen w-full text-green-400 font-mono relative z-10"
         style={{ overflowX: "hidden" }}
       >
         <div
