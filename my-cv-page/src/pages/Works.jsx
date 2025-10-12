@@ -10,7 +10,6 @@ function RecentWorks() {
       className="flex items-center justify-center p-6"
     >
       <div className="w-full max-w-4xl text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">My Projects</h1>
         <a
           href={githubLink}
           target="_blank"
