@@ -13,14 +13,24 @@ function Navbar() {
 
   return (
     <header className="w-full bg-black text-green-400 font-mono border-b border-green-500/30 shadow-[0_0_25px_rgba(34,197,94,0.15)] relative z-20">
+      <style>
+        {`
+          @keyframes blinkCursor {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+          }
+          .blink-cursor {
+            animation: blinkCursor 1s step-start infinite;
+          }
+        `}
+      </style>
+
       <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-3">
-        {/* Fake cmd path */}
         <div className="text-sm text-green-300/80 select-none">
-          C:\Portfolio\Vytautas&gt;
-          <span className="text-green-100">_</span>
+          C:\\Portfolio\\Vytautas&gt;
+          <span className="text-green-100 blink-cursor">_</span>
         </div>
 
-        {/* Desktop Links */}
         <nav className="hidden sm:flex gap-6 text-sm tracking-wide">
           {links.map((link) => (
             <a
@@ -34,7 +44,6 @@ function Navbar() {
           ))}
         </nav>
 
-        {/* Mobile Toggle */}
         <button
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className="sm:hidden text-green-400 focus:outline-none"
@@ -60,7 +69,6 @@ function Navbar() {
         </button>
       </div>
 
-      {/* Mobile Menu */}
       {isMenuOpen && (
         <div className="sm:hidden bg-black border-t border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.15)]">
           <nav className="flex flex-col items-center py-4 space-y-2 text-green-300">
