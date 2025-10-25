@@ -35,11 +35,11 @@ function Home() {
     </style>
   );
 
-  const prompt = "C:\\\\Users\\\\Vytautas>";
+ const prompt = "C:\\Users\\Vytautas>";
 
   useEffect(() => {
     const boot = [
-      "C:\\\\Windows\\\\System32\\\\cmd.exe",
+      "C:\\Windows\\System32\\cmd.exe",
       "[Admin]",
       "Microsoft Windows [Version 10.0.19045]",
       "(c) Vytautas Vilkas. All rights reserved.",
@@ -171,7 +171,7 @@ function Home() {
       <div className="w-full max-w-3xl mx-auto p-6">
         <div className="rounded-xl border border-green-500/30 bg-black shadow-[0_0_30px_rgba(34,197,94,0.15)] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/20 bg-black text-xs tracking-widest text-green-300/80">
-            <span>C:\\Windows\\System32\\cmd.exe</span>
+            <span>C:\Windows\System32\cmd.exe</span>
             <span>[Admin]</span>
           </div>
 
