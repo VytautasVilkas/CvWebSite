@@ -66,17 +66,6 @@ jobs:
           fi
           echo "Deployed commit: $(git rev-parse --short HEAD)"
 
-          # --- certificates ---
-          if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-            sudo systemctl stop nginx || true
-            sudo certbot certonly --standalone --preferred-challenges http \
-              --agree-tos --no-eff-email -m "$EMAIL" \
-              -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive || true
-            sudo systemctl start nginx || true
-          else
-            sudo certbot renew --quiet || true
-          fi
-
           # --- nginx vhost: EXACT file from repo ---
           sudo mkdir -p /var/www/certbot
           sudo install -m 644 "$APP_DIR/nginx.conf" "/etc/nginx/sites-available/${DOMAIN}.conf"
