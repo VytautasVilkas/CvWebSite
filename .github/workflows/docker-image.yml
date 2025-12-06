@@ -91,7 +91,18 @@ jobs:
           INTERNAL_PORT="3000"   # internal port on localhost only
 
           sudo docker build --pull -t "$IMAGE_NAME:latest" .
+
+          # stop old container if it exists
           sudo docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+          # free port 3000 if some zombie docker-proxy is still holding it
+          PIDS="$(sudo lsof -t -i:3000 || true)"
+          if [ -n "$PIDS" ]; then
+            echo "Port 3000 is in use by PIDs: $PIDS – killing them..."
+            sudo kill $PIDS || true
+          fi
+
+          # start new container bound only to localhost:3000
           sudo docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
             -p 127.0.0.1:${INTERNAL_PORT}:80 "$IMAGE_NAME:latest"
 
@@ -105,4 +116,5 @@ jobs:
           done
           curl -fsS "http://127.0.0.1:${INTERNAL_PORT}/" >/dev/null
           curl -k -I -H "Host: $DOMAIN" https://127.0.0.1 || true
+          
           EOSH
