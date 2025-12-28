@@ -22,7 +22,6 @@ jobs:
           WORK_DIR: ${{ secrets.WORK_DIR }}
           MAIN_BRANCH: ${{ secrets.MAIN_BRANCH }}
         run: |
-          # Important: export vars INTO the remote shell, then feed the script via heredoc.
           sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no \
             "$SSH_USER@$SSH_HOST" "export REPO_URL='$REPO_URL' WORK_DIR='$WORK_DIR' MAIN_BRANCH='${MAIN_BRANCH:-main}'; bash -s" <<'EOSH'
           set -euo pipefail
@@ -33,16 +32,15 @@ jobs:
           REPO_ROOT="$WORK_DIR"
           APP_DIR="$WORK_DIR/my-cv-page"
           DOMAIN="vytautasvilkas.lt"
-          EMAIL="admin@vytautasvilkas.lt"
 
           # --- packages / services ---
           if command -v apt-get >/dev/null 2>&1; then
             export DEBIAN_FRONTEND=noninteractive
             sudo apt-get update
             sudo apt-get install -y git curl nginx certbot docker.io || true
-            sudo systemctl enable --now docker || true
             sudo systemctl enable --now nginx  || true
-            # Make sure firewall won't block 80/443 (idempotent)
+            # NOTE: on Ubuntu Core/snap docker, this may be a no-op; that's fine.
+            sudo systemctl enable --now docker || true
             sudo ufw allow 'Nginx Full' || true
           fi
 
@@ -54,6 +52,7 @@ jobs:
             git fetch --all --prune
             git checkout "$BRANCH" || git checkout -B "$BRANCH"
             git reset --hard "origin/$BRANCH"
+            git clean -fdx || true
           else
             mkdir -p "$REPO_ROOT"; cd "$REPO_ROOT"
             git init
@@ -84,29 +83,55 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx || sudo service nginx reload
 
-          # --- build & run container ---
+          # --- build image ---
           cd "$APP_DIR"
           IMAGE_NAME="my-cv-page"
-          CONTAINER_NAME="my-cv-page"
-          INTERNAL_PORT="3000"   # internal port on localhost only
+          INTERNAL_PORT="3000"   # nginx proxies to 127.0.0.1:3000
 
           sudo docker build --pull -t "$IMAGE_NAME:latest" .
 
-          # stop old container if it exists
-          sudo docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+          # --- BLUE/GREEN deploy on same port ---
+          # Start NEW container on a temporary local port, health-check it, then swap to 3000.
+          NEW="my-cv-page-$(date +%s)"
+          TMP_PORT="3001"
 
-          # free port 3000 if some zombie docker-proxy is still holding it
-          PIDS="$(sudo lsof -t -i:3000 || true)"
-          if [ -n "$PIDS" ]; then
-            echo "Port 3000 is in use by PIDs: $PIDS – killing them..."
-            sudo kill $PIDS || true
+          # best-effort cleanup of any previous temp container/port
+          sudo docker rm -f "$NEW" 2>/dev/null || true
+
+          # Start new version on 127.0.0.1:3001
+          sudo docker run -d --name "$NEW" --restart unless-stopped \
+            -p 127.0.0.1:${TMP_PORT}:80 "$IMAGE_NAME:latest"
+
+          # health check new container on TMP port
+          for i in $(seq 1 45); do
+            if curl -fsS "http://127.0.0.1:${TMP_PORT}/" >/dev/null; then
+              echo "New container is healthy on :${TMP_PORT}"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:${TMP_PORT}/" >/dev/null
+
+          # Find which container (if any) currently owns port 3000
+          OLD_ID="$(sudo docker ps --filter "publish=127.0.0.1:${INTERNAL_PORT}" -q || true)"
+
+          # Stop the old 3000 container (best effort). If it's stuck, we still proceed by switching port mappings.
+          if [ -n "$OLD_ID" ]; then
+            sudo docker stop "$OLD_ID" || true
           fi
 
-          # start new container bound only to localhost:3000
-          sudo docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+          # Free up port 3000: remove any container currently publishing it (best effort)
+          if [ -n "$OLD_ID" ]; then
+            sudo docker rm -f "$OLD_ID" || true
+          fi
+
+          # Now move NEW from 3001 -> 3000 by recreating it with the correct mapping.
+          # (Docker can't change port mappings on a running container.)
+          sudo docker rm -f "$NEW" || true
+          sudo docker run -d --name my-cv-page --restart unless-stopped \
             -p 127.0.0.1:${INTERNAL_PORT}:80 "$IMAGE_NAME:latest"
 
-          # --- health checks ---
+          # Final health check on real port
           for i in $(seq 1 45); do
             if curl -fsS "http://127.0.0.1:${INTERNAL_PORT}/" >/dev/null; then
               echo "App is up on :${INTERNAL_PORT}"
@@ -115,6 +140,11 @@ jobs:
             sleep 1
           done
           curl -fsS "http://127.0.0.1:${INTERNAL_PORT}/" >/dev/null
+
+          # Optional: show HTTPS headers locally
           curl -k -I -H "Host: $DOMAIN" https://127.0.0.1 || true
-          
+
+          # Cleanup: remove any older my-cv-page-* containers (best effort)
+          sudo docker ps -a --filter "name=my-cv-page-" -q | xargs -r sudo docker rm -f || true
+
           EOSH
